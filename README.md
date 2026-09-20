@@ -25,38 +25,66 @@
 
 ## 설치
 
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+macOS / Linux (Windows는 Git Bash) 에서는 스크립트 하나면 끝납니다.
 
-cp .env.example .env    # 코레일 아이디/비밀번호 입력
+```bash
+./setup.sh
 ```
 
-코레일 회원 계정이 필요합니다(조회에도 로그인이 필요한 API입니다).
+파이썬 확인 → 가상환경(`.venv`) 생성 → 의존성 설치 → `.env` 준비 → 테스트·모의조회 점검까지
+한 번에 하고, 다음에 뭘 하면 되는지 알려줍니다. 여러 번 실행해도 안전합니다.
+
+그다음 `.env` 를 열어 코레일 계정을 넣으세요. 조회에도 로그인이 필요한 API라 계정이 꼭 있어야 합니다.
+
+```
+KORAIL_ID=010-1234-5678
+KORAIL_PW=실제비밀번호
+```
+
 `KORAIL_ID` 는 회원번호 8자리 / 휴대폰번호 / 이메일 중 하나입니다.
 **휴대폰번호는 반드시 하이픈을 넣어야 합니다** (`010-1234-5678`). 하이픈이 없으면 회원번호로 인식돼 로그인이 실패합니다.
 
-## 사용법
+<details>
+<summary>직접 설치하거나 Windows PowerShell 을 쓴다면</summary>
 
-```bash
-# 기본: 서울→포항, 다가오는 23일 17:00 ~ 24일 12:00, 60초 간격
-python -m korail_monitor
-
-# 1매만 확인 (요청 수 절반)
-python -m korail_monitor --seats 1
-
-# 구간을 직접 지정
-python -m korail_monitor --start "2026-09-23 17:00" --end "2026-09-24 12:00"
-
-# 좌석이 열리면 슬랙으로 알림
-python -m korail_monitor --webhook "https://hooks.slack.com/services/..."
-
-# macOS 알림 센터로 띄우기
-python -m korail_monitor --notify-cmd 'osascript -e display notification "{body}" with title "{title}"'
-
-# 계정 없이 동작만 확인 (가짜 데이터)
+```powershell
+py -3 -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+pip install tzdata          # Windows 는 시간대 데이터가 따로 필요합니다
+copy .env.example .env      # 열어서 계정 입력
 python -m korail_monitor --mock --once -v
 ```
+</details>
+
+## 사용법
+
+`./run.sh` 는 가상환경을 알아서 잡아주는 실행 래퍼입니다. 옵션은 그대로 전달됩니다.
+
+```bash
+# 실제 API로 1회만 조회 — 로그인과 조회가 되는지 가장 먼저 확인
+./run.sh --once -v
+
+# 기본: 서울→포항, 다가오는 23일 17:00 ~ 24일 12:00, 1·2매 확인, 60초 간격
+./run.sh
+
+# 1매만 확인 (요청 수 절반)
+./run.sh --seats 1
+
+# 구간을 직접 지정
+./run.sh --start "2026-09-23 17:00" --end "2026-09-24 12:00"
+
+# 좌석이 열리면 슬랙으로 알림
+./run.sh --webhook "https://hooks.slack.com/services/..."
+
+# macOS 알림 센터로 띄우기
+./run.sh --notify-cmd 'osascript -e display notification "{body}" with title "{title}"'
+
+# 계정 없이 동작만 확인 (가짜 데이터)
+./run.sh --mock --once -v
+```
+
+가상환경을 직접 활성화했다면 `python -m korail_monitor ...` 로 똑같이 쓸 수 있습니다.
 
 주요 옵션:
 
@@ -99,11 +127,12 @@ python -m korail_monitor --mock --once -v
 | `korail_monitor/monitor.py` | 1분 주기 폴링 루프, 실패 시 백오프 |
 | `korail_monitor/notify.py` | 콘솔 / 웹훅 / 명령 / JSONL 기록 |
 | `korail_monitor/mock.py` | 계정 없이 돌려보는 가짜 조회기 |
+| `setup.sh` / `run.sh` | 설치 자동화 / 실행 래퍼 |
 
 ## 테스트
 
 ```bash
-python -m unittest discover -s tests -v
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
 ## 장시간 돌리기
@@ -111,7 +140,8 @@ python -m unittest discover -s tests -v
 `nohup` 이나 `screen`/`tmux` 로 띄워두면 됩니다. 구간이 모두 지나면 스스로 종료합니다.
 
 ```bash
-nohup python -m korail_monitor --webhook "$KORAIL_WEBHOOK" > monitor.out 2>&1 &
+nohup ./run.sh --webhook "$KORAIL_WEBHOOK" > monitor.out 2>&1 &
+tail -f monitor.out
 ```
 
 ## 주의
