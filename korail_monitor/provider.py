@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import socket
 import time as _time
 from datetime import datetime, timedelta
 from typing import List, Optional, Sequence
@@ -24,6 +25,10 @@ MAX_PASSENGERS = 9
 
 #: 하루치를 훑을 때 허용하는 최대 페이지 수 (무한 루프 방지)
 MAX_PAGES_PER_DAY = 12
+
+#: 응답이 없을 때 기다릴 최대 시간(초).
+#: korail2 가 requests 에 타임아웃을 걸지 않아, 네트워크가 막히면 영원히 멈춘다.
+REQUEST_TIMEOUT = 20
 
 
 class ProviderError(RuntimeError):
@@ -108,6 +113,9 @@ class KorailProvider(object):
         self._request_delay = request_delay
         self._train_type = train_type or TrainType.ALL
         self._client = None
+        # korail2 내부 requests 호출에 타임아웃이 없어 소켓 수준에서 걸어둔다
+        if socket.getdefaulttimeout() is None:
+            socket.setdefaulttimeout(REQUEST_TIMEOUT)
 
     # -- 연결 -----------------------------------------------------------
     def _connect(self):

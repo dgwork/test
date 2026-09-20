@@ -30,6 +30,14 @@ def load_dotenv(path: str = ".env") -> None:
             os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 
+#: .env.example 을 복사만 하고 채우지 않은 상태를 걸러내기 위한 값들
+PLACEHOLDER_VALUES = {"", "비밀번호", "실제비밀번호", "010-1234-5678", "01012345678", "your-password"}
+
+
+def looks_like_placeholder(korail_id: str, korail_pw: str) -> bool:
+    return korail_id.strip() in PLACEHOLDER_VALUES or korail_pw.strip() in PLACEHOLDER_VALUES
+
+
 def resolve_train_type(name: str):
     from korail2 import TrainType
 
@@ -114,6 +122,14 @@ def main(argv: Optional[list] = None) -> int:
             print(
                 "코레일 로그인 정보가 없습니다. 환경변수 KORAIL_ID / KORAIL_PW 를 설정하거나 "
                 ".env 파일을 만들어 주세요. (계정 없이 확인만 하려면 --mock)",
+                file=sys.stderr,
+            )
+            return 2
+        if looks_like_placeholder(korail_id, korail_pw):
+            print(
+                ".env 의 KORAIL_ID / KORAIL_PW 가 아직 예시값입니다. 실제 계정 정보로 바꿔주세요.\n"
+                "  휴대폰번호로 로그인한다면 하이픈을 넣어야 합니다: 010-1234-5678 형식\n"
+                "  (계정 없이 동작만 보려면 --mock)",
                 file=sys.stderr,
             )
             return 2
