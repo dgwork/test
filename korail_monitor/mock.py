@@ -53,16 +53,14 @@ class MockProvider(object):
         return snaps
 
     def search_with_counts(self, dep: str, arr: str, start: datetime, end: datetime,
-                           probe_max: int = 1) -> List[TrainSnapshot]:
+                           target: int = 2) -> List[TrainSnapshot]:
         import dataclasses
 
         base = self.search(dep, arr, start, end, passengers=1)
-        if probe_max <= 1:
-            return base
         return [
             dataclasses.replace(
                 snap,
-                max_bookable=self._rand.randint(1, probe_max) if snap.has_seat else None,
+                max_bookable=self._rand.randint(1, target) if snap.has_seat else None,
             )
             for snap in base
         ]

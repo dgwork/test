@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Sequence
 
 from .diff import Change, diff, index
 from .models import TrainSnapshot
+from .provider import AuthError
 from .window import format_window, now_kst
 
 log = logging.getLogger(__name__)
@@ -23,7 +24,8 @@ class MonitorConfig:
     start: datetime = None  # type: ignore[assignment]
     end: datetime = None  # type: ignore[assignment]
     interval: float = 60.0
-    probe_max: int = 1
+    #: 목표 매수. 1매부터 이 매수까지 각각 예매 가능한지 확인한다.
+    seats: int = 2
     #: 변화가 없어도 매 조회마다 현황표를 출력할지
     verbose: bool = False
     #: 매진 등 '나쁜 소식'도 알림 채널로 보낼지
@@ -39,14 +41,15 @@ class MonitorState:
     consecutive_errors: int = 0
 
 
-def summarize(snapshots: Sequence[TrainSnapshot]) -> str:
-    """조회 결과 한 줄 요약."""
+def summarize(snapshots: Sequence[TrainSnapshot], seats: int = 2) -> str:
+    """조회 결과 한 줄 요약. 목표 매수와 1매 가능 편수를 함께 보여준다."""
     available = [s for s in snapshots if s.has_seat]
+    at_target = [s for s in available if (s.max_bookable or 1) >= seats]
     waiting = [s for s in snapshots if s.waiting and not s.has_seat]
-    counted = [s.max_bookable for s in available if s.max_bookable]
     summary = "열차 %d편 중 예매가능 %d편" % (len(snapshots), len(available))
-    if counted:
-        summary += " (최대 %d인까지 가능한 열차 있음)" % max(counted)
+    if seats > 1:
+        summary += " (%d매 가능 %d편, 1매만 가능 %d편)" % (
+            seats, len(at_target), len(available) - len(at_target))
     if waiting:
         summary += ", 예약대기 %d편" % len(waiting)
     return summary
@@ -63,7 +66,7 @@ def poll_once(provider, config: MonitorConfig, state: MonitorState,
     """한 번 조회하고, 변화가 있으면 알린다."""
     polled_at = now_kst()
     snapshots = provider.search_with_counts(
-        config.dep, config.arr, config.start, config.end, probe_max=config.probe_max
+        config.dep, config.arr, config.start, config.end, target=config.seats
     )
     current = index(snapshots)
     changes = diff(state.previous, current)
@@ -74,14 +77,15 @@ def poll_once(provider, config: MonitorConfig, state: MonitorState,
 
     stamp = polled_at.strftime("%H:%M:%S")
     if notify_changes:
-        title = "[%s] %s → %s 변동: %s" % (stamp, config.dep, config.arr, summarize(snapshots))
+        title = "[%s] %s → %s 변동: %s" % (
+            stamp, config.dep, config.arr, summarize(snapshots, config.seats))
         for notifier in notifiers:
             notifier.send(title, notify_changes)
     elif config.verbose:
-        print("[%s] %s" % (stamp, summarize(snapshots)))
+        print("[%s] %s" % (stamp, summarize(snapshots, config.seats)))
         print(render_table(snapshots))
     else:
-        log.info("[%s] %s", stamp, summarize(snapshots))
+        log.info("[%s] %s", stamp, summarize(snapshots, config.seats))
 
     if recorder is not None:
         recorder.record(polled_at, snapshots, changes)
@@ -95,10 +99,12 @@ def run(provider, config: MonitorConfig, notifiers: Sequence[object], recorder=N
         state: Optional[MonitorState] = None, sleeper=time.sleep) -> MonitorState:
     """중단(Ctrl+C)하거나 구간이 지날 때까지 `interval` 초마다 조회한다."""
     state = state or MonitorState()
-    print("코레일 좌석 모니터 시작: %s → %s, %s, %d초 간격"
-          % (config.dep, config.arr, format_window(config.start, config.end), int(config.interval)))
-    if config.probe_max > 1:
-        print("예매가능 인원 탐색: 최대 %d명까지 (조회 요청이 그만큼 늘어납니다)" % config.probe_max)
+    print("코레일 좌석 모니터 시작: %s → %s, %s, 목표 %d매, %d초 간격"
+          % (config.dep, config.arr, format_window(config.start, config.end),
+             config.seats, int(config.interval)))
+    if config.seats > 1:
+        print("1매부터 %d매까지 각각 예매 가능한지 확인합니다 (조회 요청이 최대 %d배)"
+              % (config.seats, config.seats))
 
     try:
         while True:
@@ -114,6 +120,10 @@ def run(provider, config: MonitorConfig, notifiers: Sequence[object], recorder=N
                 state.consecutive_errors = 0
             except KeyboardInterrupt:
                 raise
+            except AuthError as exc:
+                # 잘못된 자격증명으로 재시도하면 계정이 잠길 수 있으므로 바로 중단
+                log.error("%s", exc)
+                break
             except Exception as exc:
                 state.errors += 1
                 state.consecutive_errors += 1

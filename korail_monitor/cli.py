@@ -49,8 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "예)\n"
-            "  python -m korail_monitor                      # 서울→포항, 23일 17:00~24일 12:00, 60초 간격\n"
-            "  python -m korail_monitor --probe-max 4        # 몇 명까지 예매 가능한지도 확인\n"
+            "  python -m korail_monitor                      # 서울→포항, 23일 17:00~24일 12:00, 1·2매 확인, 60초 간격\n"
+            "  python -m korail_monitor --seats 1            # 1매만 확인 (요청 수 절반)\n"
             "  python -m korail_monitor --mock --once -v     # 계정 없이 동작만 확인\n"
         ),
     )
@@ -59,8 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--start", help="구간 시작 (기본: 다가오는 23일 17:00). 예 '2026-09-23 17:00'")
     parser.add_argument("--end", help="구간 끝 (기본: 그 다음 날 12:00)")
     parser.add_argument("--interval", type=float, default=60.0, help="조회 간격(초). 기본 60")
-    parser.add_argument("--probe-max", type=int, default=1, metavar="N",
-                        help="몇 명까지 예매 가능한지 1~9명 범위에서 확인 (기본 1 = 수량 확인 안 함)")
+    parser.add_argument("--seats", type=int, default=2, metavar="N",
+                        help="목표 매수. 1매부터 N매까지 각각 예매 가능한지 확인한다 (기본 2)")
     parser.add_argument("--train-type", choices=TRAIN_TYPES, default="all", help="열차 종류 (기본: all)")
     parser.add_argument("--request-delay", type=float, default=0.4,
                         help="API 요청 사이 대기(초). 기본 0.4")
@@ -133,7 +133,7 @@ def main(argv: Optional[list] = None) -> int:
         start=start,
         end=end,
         interval=args.interval,
-        probe_max=args.probe_max,
+        seats=args.seats,
         verbose=args.verbose,
         notify_all=args.notify_all,
         max_polls=1 if args.once else args.max_polls,

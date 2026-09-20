@@ -3,8 +3,8 @@
 
 `KorailProvider` 는 korail2 라이브러리를 통해 코레일 모바일 API(smart.letskorail.com)를
 호출한다. 코레일은 "잔여 좌석 몇 석" 이라는 숫자를 공개하지 않고 일반실/특실별
-예약가능·매진 코드만 내려주기 때문에, 수량이 필요하면 `probe_max` 를 켜서
-'몇 명까지 한 번에 예매되는지'(1~9명)를 계단식으로 확인한다.
+예약가능·매진 코드만 내려주기 때문에, 매수를 알려면 1명·2명... 순으로 같은 구간을
+반복 조회해 '몇 매까지 함께 끊을 수 있는지'를 계단식으로 확인한다.
 """
 
 from __future__ import annotations
@@ -28,6 +28,10 @@ MAX_PAGES_PER_DAY = 12
 
 class ProviderError(RuntimeError):
     pass
+
+
+class AuthError(ProviderError):
+    """로그인 자체가 거부된 경우. 재시도해도 소용없고 계정이 잠길 수 있으므로 즉시 중단한다."""
 
 
 def _to_snapshot(train, max_bookable: Optional[int] = None) -> TrainSnapshot:
@@ -113,7 +117,12 @@ class KorailProvider(object):
             log.info("코레일 로그인 중...")
             self._client = Korail(self._korail_id, self._korail_pw, auto_login=True)
             if not self._client.logined:
-                raise ProviderError("코레일 로그인에 실패했습니다. 아이디/비밀번호를 확인하세요.")
+                self._client = None
+                raise AuthError(
+                    "코레일 로그인에 실패했습니다. KORAIL_ID / KORAIL_PW 를 확인하세요.\n"
+                    "  - 휴대폰번호는 하이픈을 넣어야 합니다: 010-1234-5678\n"
+                    "  - 회원번호는 하이픈 없는 8자리, 이메일은 그대로 입력합니다."
+                )
             log.info("로그인 성공 (%s)", self._client.name or self._korail_id)
         return self._client
 
@@ -153,28 +162,26 @@ class KorailProvider(object):
         )
 
     def search_with_counts(self, dep: str, arr: str, start: datetime, end: datetime,
-                           probe_max: int = 1) -> List[TrainSnapshot]:
-        """좌석 상태 + '최대 몇 명까지 예매 가능한지'를 함께 조회한다.
+                           target: int = 2) -> List[TrainSnapshot]:
+        """열차마다 '몇 매까지 함께 끊을 수 있는지'를 1매부터 목표 매수까지 확인한다.
 
-        인원수를 1명부터 하나씩 올려가며 같은 조회를 반복한다. 어떤 열차도
-        좌석을 내주지 않는 인원수에 도달하면 더 올리지 않고 멈춘다.
-        (요청 수 = 인원 단계 수 × 구간 페이지 수 이므로 probe_max 는 작게 쓰는 편이 좋다.)
+        코레일은 잔여 좌석 수를 공개하지 않지만, N명으로 검색하면 N명이 함께 앉을 수
+        있는 열차만 '예약가능'으로 돌려준다. 그래서 1명, 2명, ... 순으로 같은 구간을
+        훑으면 열차별 최대 매수를 알 수 있다.
+
+        목표 매수(`target`)를 넘겨서까지 확인하지는 않는다. 2매가 목표라면 1매/2매 두
+        가지만 보면 충분하고, 조회 요청도 딱 2배에서 멈춘다.
         """
-        probe_max = max(1, min(int(probe_max), MAX_PASSENGERS))
+        target = max(1, min(int(target), MAX_PASSENGERS))
         base = {s.key: s for s in self.search(dep, arr, start, end, passengers=1)}
-        if probe_max == 1:
-            return sorted(base.values(), key=lambda s: s.dep_at)
 
         best = {key: (1 if snap.has_seat else 0) for key, snap in base.items()}
-        for count in range(2, probe_max + 1):
-            snaps = self.search(dep, arr, start, end, passengers=count)
-            any_seat = False
-            for snap in snaps:
+        for count in range(2, target + 1):
+            if not any(best[key] == count - 1 for key in best):
+                break  # 직전 매수로도 가능한 열차가 없으면 더 올려볼 필요가 없다
+            for snap in self.search(dep, arr, start, end, passengers=count):
                 if snap.has_seat and snap.key in best:
                     best[snap.key] = count
-                    any_seat = True
-            if not any_seat:
-                break
 
         merged = [_with_count(snap, best.get(key, 0)) for key, snap in base.items()]
         return sorted(merged, key=lambda s: s.dep_at)

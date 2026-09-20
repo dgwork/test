@@ -25,11 +25,11 @@ class Change:
     def describe(self) -> str:
         label = {
             "seat_open": "🟢 좌석 열림",
-            "count_up": "🟢 예매가능 인원 증가",
+            "count_up": "🟢 예매가능 매수 증가",
             "new_train": "🟢 새 열차 등장",
             "waiting_open": "🟡 예약대기 가능",
             "seat_closed": "🔴 매진",
-            "count_down": "🔻 예매가능 인원 감소",
+            "count_down": "🔻 예매가능 매수 감소",
             "train_gone": "⚫ 목록에서 사라짐",
         }.get(self.kind, self.kind)
 
@@ -40,7 +40,7 @@ class Change:
                 seat_label(self.before.special_code),
             )
         if self.kind in ("count_up", "count_down") and self.before is not None:
-            detail += "  (이전: %s명)" % (self.before.max_bookable or 0)
+            detail += "  (이전: %s매)" % (self.before.max_bookable or 0)
         return "%s  %s" % (label, detail)
 
 

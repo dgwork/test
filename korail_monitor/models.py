@@ -35,7 +35,7 @@ class TrainSnapshot:
     special_code: Optional[str]
     waiting: bool
     reserve_note: str = ""
-    #: 좌석이 남아 있는 것으로 확인된 최대 인원수(1~probe_max). 미탐색이면 None.
+    #: 함께 끊을 수 있다고 확인된 매수(목표 매수 이상). 좌석이 없거나 미확인이면 None.
     max_bookable: Optional[int] = None
 
     @property
@@ -64,10 +64,10 @@ class TrainSnapshot:
         ]
         if self.waiting:
             parts.append("예약대기 가능")
-        if self.max_bookable is not None:
-            parts.append("최대 %d인 예매가능" % self.max_bookable)
+        if self.max_bookable:
+            parts.append("%d매 예매가능" % self.max_bookable)
         elif self.has_seat:
-            parts.append("1인 예매가능")
+            parts.append("예매가능")
         return " | ".join(parts)
 
     def to_dict(self) -> dict:

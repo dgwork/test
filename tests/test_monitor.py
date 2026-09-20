@@ -25,7 +25,7 @@ class FlakyProvider(object):
     def __init__(self):
         self.calls = 0
 
-    def search_with_counts(self, dep, arr, start, end, probe_max=1):
+    def search_with_counts(self, dep, arr, start, end, target=2):
         self.calls += 1
         if self.calls <= 2:
             raise RuntimeError("네트워크 오류")
