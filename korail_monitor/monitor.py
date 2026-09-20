@@ -36,7 +36,10 @@ class MonitorConfig:
 @dataclass
 class MonitorState:
     previous: Dict[str, TrainSnapshot] = field(default_factory=dict)
+    #: 성공한 조회 횟수
     polls: int = 0
+    #: 실패를 포함한 시도 횟수 (--once / --max-polls 는 이 값을 기준으로 센다)
+    attempts: int = 0
     errors: int = 0
     consecutive_errors: int = 0
 
@@ -108,13 +111,14 @@ def run(provider, config: MonitorConfig, notifiers: Sequence[object], recorder=N
 
     try:
         while True:
-            if config.max_polls is not None and state.polls >= config.max_polls:
+            if config.max_polls is not None and state.attempts >= config.max_polls:
                 break
             if now_kst() > config.end:
                 print("조회 구간이 모두 지났습니다. 모니터를 종료합니다.")
                 break
 
             started = time.monotonic()
+            state.attempts += 1
             try:
                 poll_once(provider, config, state, notifiers, recorder)
                 state.consecutive_errors = 0
@@ -132,7 +136,7 @@ def run(provider, config: MonitorConfig, notifiers: Sequence[object], recorder=N
                     log.error("연속 실패가 많아 모니터를 종료합니다.")
                     break
 
-            if config.max_polls is not None and state.polls >= config.max_polls:
+            if config.max_polls is not None and state.attempts >= config.max_polls:
                 break
 
             # 실패가 이어지면 간격을 늘려 서버에 부담을 주지 않는다

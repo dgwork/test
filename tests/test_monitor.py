@@ -91,9 +91,19 @@ class RunLoopTest(unittest.TestCase):
         slept = []
         provider = FlakyProvider()
         state = run(provider, make_config(max_polls=3, interval=10.0), [], sleeper=slept.append)
+        self.assertEqual(state.attempts, 3, "실패도 시도 횟수로 센다")
         self.assertEqual(state.errors, 2)
-        self.assertEqual(state.polls, 3, "실패한 조회는 성공 횟수로 세지 않는다")
+        self.assertEqual(state.polls, 1, "성공한 조회만 polls 로 센다")
         self.assertGreater(slept[0], 10.0, "실패 뒤에는 간격을 늘려 다시 시도한다")
+
+    def test_once_gives_up_after_a_single_failed_attempt(self):
+        """--once 는 '성공할 때까지'가 아니라 '한 번만' 이어야 한다."""
+        slept = []
+        provider = FlakyProvider()
+        state = run(provider, make_config(max_polls=1, interval=60.0), [], sleeper=slept.append)
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(state.polls, 0)
+        self.assertEqual(slept, [], "한 번 시도하고 끝이면 기다릴 이유가 없다")
 
 
 class SummarizeTest(unittest.TestCase):
