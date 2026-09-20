@@ -1,0 +1,2 @@
+# 코레일 모바일 API 래퍼 (로그인/조회). requests, six, PyCryptodome 를 함께 끌어온다.
+korail2>=0.4.0
